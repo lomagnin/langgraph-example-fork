@@ -1,8 +1,14 @@
 from functools import lru_cache
+import os
+
 from langchain_anthropic import ChatAnthropic
+from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 from my_agent.utils.tools import tools
 from langgraph.prebuilt import ToolNode
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 @lru_cache(maxsize=4)
@@ -10,12 +16,19 @@ def _get_model(model_name: str):
     if model_name == "openai":
         model = ChatOpenAI(temperature=0, model_name="gpt-4o")
     elif model_name == "anthropic":
-        model =  ChatAnthropic(temperature=0, model_name="claude-3-sonnet-20240229")
+        model = ChatAnthropic(temperature=0, model_name="claude-3-sonnet-20240229")
+    elif model_name == "llama3.1":
+        base_url = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        model = ChatOllama(model="llama3.1", base_url=base_url)
+    elif model_name == "llama3.1:70b":
+        base_url = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        model = ChatOllama(model="llama3.1:70b", base_url=base_url)
     else:
         raise ValueError(f"Unsupported model type: {model_name}")
 
     model = model.bind_tools(tools)
     return model
+
 
 # Define the function that determines whether to continue or not
 def should_continue(state):
@@ -31,15 +44,17 @@ def should_continue(state):
 
 system_prompt = """Be a helpful assistant"""
 
+
 # Define the function that calls the model
 def call_model(state, config):
     messages = state["messages"]
     messages = [{"role": "system", "content": system_prompt}] + messages
-    model_name = config.get('configurable', {}).get("model_name", "anthropic")
+    model_name = config.get("configurable", {}).get("model_name", "ollama")
     model = _get_model(model_name)
     response = model.invoke(messages)
     # We return a list, because this will get added to the existing list
     return {"messages": [response]}
+
 
 # Define the function to execute tools
 tool_node = ToolNode(tools)
